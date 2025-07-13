@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
+#include <unistd.h>
 #include <string.h>
 
 #define CH_MAX 120
@@ -26,17 +27,70 @@ struct Node {
 void *all_pointers[TREE_SIZE];
 int p = 0;
 
-float *neural_net ( char state[100], int n_moves )
+float *neural_net ( char state[100] )
 {
     return 0;
 }
 int *get_legal_moves ( char state[100], int *size )
 {
-    return 0;
+    FILE *f;
+
+    f = fopen ( "request.txt", "w" );
+    fprintf ( f, "%c", '1' );
+    for ( int i = 0; i < strlen ( state ); i++ ) {
+        fprintf ( f, "%c", state[i] );
+    }
+    fclose ( f );
+
+    while ( access ( "response.txt", F_OK ) == -1 ) {
+        sleep ( 0.001 );
+    }
+
+    char buf[1024];
+    f = fopen ( "response.txt", "r" );
+    fgets ( buf, sizeof ( buf ), f );
+    fclose ( f );
+
+    int legal[100] = calloc ( 100, sizeof ( int ) );
+    int count = 0;
+
+    char *token = strtok ( buf, " " );
+    while ( token != NULL ) {
+        legal[count++] = atoi ( token );
+        token = strtok ( NULL, " " );
+    }
+
+    remove ( "response.txt" );
+    all_pointers[p++] = legal;
+
+    *size = count;
+    return legal;
 }
 char *get_new_board ( char state[100], int move_index )
 {
-    return 0;
+    FILE *f;
+
+    f = fopen ( "request.txt", "w" );
+    fprintf ( f, "%c", '2' );
+    for ( int i = 0; i < strlen ( state ); i++ ) {
+        fprintf ( f, "%c", state[i] );
+    }
+    fprintf ( f, "%c", '$' );
+    fprintf ( f, "%d", move_index );
+    fclose ( f );
+
+    while ( access ( "response.txt", F_OK ) == -1 ) {
+        sleep ( 0.001 );
+    }
+
+    char buf[1024] = malloc ( 1024 * sizeof ( char ) );
+    f = fopen ( "response.txt", "r" );
+    fgets ( buf, sizeof ( buf ), f );
+    fclose ( f );
+
+    all_pointers[p++] = buf;
+    remove ( "response.txt" );
+    return buf;
 }
 void set_zeros ( int *arr, int size )
 {
@@ -56,7 +110,7 @@ struct Node *init_node ( char *board )
     memcpy ( node->a, legal_moves, n_moves * sizeof ( legal_moves[0] ) );
 
     memcpy ( node->state, board, 8 * 8 * sizeof ( char ) );
-    nn = neural_net ( board, n_moves );
+    nn = neural_net ( board );
     node->node_val = nn[0];
     node->n_actions = n_moves;
     
@@ -74,9 +128,9 @@ struct Node *init_node ( char *board )
     return node;
 }
 
-float *return_pi ( char given_board[100], int given_moves, int cur_player )
+float *return_pi ( char given_board[100], int given_moves  )
 {
-    // How many moves have been played in the game till then : given_moves
+    // Given moves : Moves played in the game till now
     p = 0;
     struct Node *root = init_node ( given_board );
 

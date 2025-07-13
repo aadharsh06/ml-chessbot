@@ -28,12 +28,16 @@ moves = moves + white_prom + black_prom + [ None ]
 # Functions for external use
 
 def mk_mvdict():
-    """Return am empty move dictionary"""
+    """Return an empty move dictionary"""
     return dict ( zip ( moves, list ( np.zeros ( len ( moves ) ) ) ) )
 
 def return_index ( move ):
     """Return index of a given move"""
     return moves.index ( move )
+
+def return_move ( index ):
+    """Return move of a given index"""
+    return moves[index]
 
 def conv_mv ( board, move ):
     # Convert a move from the chess module encoding to our encoding
