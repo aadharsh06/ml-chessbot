@@ -2,7 +2,17 @@
 import time
 import os
 import chess as ch
+import numpy as np
+import tensorflow as tf
 import index_moves as im
+import neural_net as nn
+
+model = nn.cnn()
+model.compile ( optimizer = 'adam',
+    loss = {
+        "policy" : tf.keras.losses.CategoricalCrossentropy ( from_logits = True ),
+        "value" : tf.keras.losses.MeanSquaredError()
+} )
 
 def get_new_board ( data ):
     fen, move_index = data.split ( '$' )
@@ -17,6 +27,14 @@ def get_legal_moves ( fen ):
 
 def neural_net ( fen ):
     legal_moves = get_legal_moves ( fen )
+    x = nn.feature_planes ( fen )
+    policy, value = model.predict ( x )
+    
+    policy = np.array ( policy[legal_moves] )
+    exp_policy = np.exp ( policy )
+    policy = exp_policy / np.sum ( exp_policy )
+    
+    return ' '.join ( [ value ] + policy )
 
 while True:
     if os.path.exists ( "request.txt" ):
