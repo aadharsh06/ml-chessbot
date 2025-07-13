@@ -11,7 +11,7 @@
 #define Cpuct 1.414
 
 struct Node {
-    char state[8][8];
+    char state[100];
     float node_val;
     int n_actions;
     int N[CH_MAX];
@@ -26,15 +26,15 @@ struct Node {
 void *all_pointers[TREE_SIZE];
 int p = 0;
 
-float *neural_net ( char state[8][8], int n_moves )
+float *neural_net ( char state[100], int n_moves )
 {
     return 0;
 }
-int *get_legal_moves ( char state[8][8], int *size )
+int *get_legal_moves ( char state[100], int *size )
 {
     return 0;
 }
-char *get_new_board ( char state[8][8], int move_index )
+char *get_new_board ( char state[100], int move_index )
 {
     return 0;
 }
@@ -74,7 +74,7 @@ struct Node *init_node ( char *board )
     return node;
 }
 
-float *return_pi ( char given_board[8][8], int given_moves )
+float *return_pi ( char given_board[100], int given_moves, int cur_player )
 {
     // How many moves have been played in the game till then : given_moves
     p = 0;
@@ -85,8 +85,7 @@ float *return_pi ( char given_board[8][8], int given_moves )
         struct Node *history_node[TREE_SIZE];
         int history_action[TREE_SIZE];
         int k = 0;
-        while ( cur_node->ch_exist == true ) {
-
+        while ( 1 ) {
             history_node[k] = cur_node;
             int a_star = 0;
             float a_star_val = 0;
@@ -119,6 +118,7 @@ float *return_pi ( char given_board[8][8], int given_moves )
                 cur_node->ch_exist = true;
                 cur_node = child_node;
                 all_pointers[p++] = child_node;
+                break;
             }
             history_action[k] = a_star;
             k += 1;
