@@ -1,11 +1,18 @@
 
-import time
-import os
+from os import environ as env
+env['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import chess as ch
 import numpy as np
 import tensorflow as tf
 import index_moves as im
 import neural_net as nn
+import socket
+import threading
+
+HOST = '127.0.0.1'
+PORT = 65432
+close = 1
 
 model = nn.cnn()
 model.compile ( optimizer = 'adam',
@@ -16,9 +23,13 @@ model.compile ( optimizer = 'adam',
 
 def get_new_board ( data ):
     fen, move_index = data.split ( '$' )
+    cur_player = fen.split()[1]
     board = ch.Board ( fen )
     board.push ( ch.Move.from_uci ( im.return_move ( int ( move_index ) ) ) )
-    return board.fen()
+    new_fen = board.fen()
+    new_fen = new_fen.split() 
+    new_fen[1] = cur_player
+    return ' '.join ( new_fen )
 
 def get_legal_moves ( fen ):
     board = ch.Board ( fen )
@@ -26,35 +37,51 @@ def get_legal_moves ( fen ):
     return ' '.join ( legal_moves )
 
 def neural_net ( fen ):
-    legal_moves = get_legal_moves ( fen )
+    legal_moves = list ( map ( int, get_legal_moves ( fen ).split ( " " ) ) )
     x = nn.feature_planes ( fen )
+    x = np.expand_dims ( x, axis = 0 )
     policy, value = model.predict ( x )
-    
-    policy = np.array ( policy[legal_moves] )
+
+    policy = np.array ( policy[0][legal_moves] )
     exp_policy = np.exp ( policy )
     policy = exp_policy / np.sum ( exp_policy )
     
-    return ' '.join ( [ value ] + policy )
+    policy = list ( map ( str, list ( policy ) ) )
+    
+    return ' '.join ( [ str ( value[0][0] ) ] + policy )
 
-while True:
-    if os.path.exists ( "request.txt" ):
-        with open ( "request.txt", "r" ) as f:
-            req = f.read().strip()
+def client ( conn, addr ):
+    with conn:
+        while True:
+            data = conn.recv ( 1024 )
+            if not data:
+                break
+            req = data.decode().strip()
+            
             function = req[0]
             data = req[1:]
-        os.remove ( "request.txt" )
-        
-        res = ""
-        if ( function == '2' ):
-            res = get_new_board ( data )
-        elif ( function == '1' ):
-            res = get_legal_moves ( data )
-        elif ( function == '0'):
-            res = neural_net ( data )
-        
-        with open ( "response.tmp", "w" ) as f:
-            f.write ( res )
-        os.rename ( "response.tmp", "response.txt" )
-    else:
-        time.sleep ( 0.001 )
+            
+            if ( function == '3' ):
+                global close
+                close = 0
+                res = "p"
+                return 
+            elif ( function == '2' ):
+                res = get_new_board ( data )
+            elif ( function == '1' ):
+                res = get_legal_moves ( data )
+            elif ( function == '0'):
+                res = neural_net ( data )
 
+            conn.sendall ( res.encode() )
+
+def start_server():
+    print ( "Started" )
+    with socket.socket ( socket.AF_INET, socket.SOCK_STREAM ) as s:
+        s.bind ( ( HOST, PORT ) )
+        s.listen()
+
+        while close:
+            conn, addr = s.accept()
+            threading.Thread ( target = client, args = ( conn, addr ) ).start()
+        s.close()

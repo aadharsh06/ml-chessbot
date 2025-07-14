@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <math.h>
-#include <unistd.h>
+#include <winsock2.h>
 #include <string.h>
 
 #define CH_MAX 120
@@ -13,11 +13,11 @@
 
 struct Node {
     char state[100];
-    float node_val;
+    double node_val;
     int n_actions;
     int N[CH_MAX];
-    float W[CH_MAX];
-    float P[CH_MAX];
+    double W[CH_MAX];
+    double P[CH_MAX];
     int a[CH_MAX];
     struct Node *children[CH_MAX];
     int n_children;
@@ -27,96 +27,138 @@ struct Node {
 void *all_pointers[TREE_SIZE];
 int p = 0;
 
-float *neural_net ( char state[100] )
+SOCKET s;
+
+SOCKET init_sever_conn()
 {
-    return 0;
+    WSADATA wsa;
+    struct sockaddr_in server;
+    char reply[1024];
+    int recv_size;
+
+    WSAStartup ( MAKEWORD ( 2, 2 ), &wsa );
+
+    s = socket ( AF_INET, SOCK_STREAM, 0 );
+
+    server.sin_addr.s_addr = inet_addr ( "127.0.0.1" );
+    server.sin_family = AF_INET;
+    server.sin_port = htons ( 65432 );
+
+    connect ( s, ( struct sockaddr * )&server, sizeof ( server ) );
+    return s;
 }
-int *get_legal_moves ( char state[100], int *size )
+char *server_call ( char *push ){
+    char *data = ( char * ) calloc ( 1024, sizeof ( char ) );
+    send ( s, push, strlen ( push ), 0 );
+
+    int data_size = recv ( s, data, 1024, 0 );
+    data[data_size] = '\0';
+    all_pointers[p++] = data;
+    return data;
+}
+void close_server_conn()
 {
-    FILE *f;
+    closesocket ( s );
+    WSACleanup();
+}
 
-    f = fopen ( "request.txt", "w" );
-    fprintf ( f, "%c", '1' );
-    for ( int i = 0; i < strlen ( state ); i++ ) {
-        fprintf ( f, "%c", state[i] );
+
+double *neural_net ( char stat[100] )
+{
+    char *st;
+    char state[100];
+    strcpy ( state, stat );
+    int new_len = strlen ( state ) + 1;
+    for ( int i = strlen ( state ); i > 0; i-- ) {
+        state[i] = state[i-1];
     }
-    fclose ( f );
+    state[0] = '0';
+    state[new_len] = '\0';
+    st = server_call ( state );
+    
+    double *nn = ( double * ) calloc ( 100, sizeof ( double ) );
+    int i = 0;
 
-    while ( access ( "response.txt", F_OK ) == -1 ) {
-        sleep ( 0.001 );
-    }
-
-    char buf[1024];
-    f = fopen ( "response.txt", "r" );
-    fgets ( buf, sizeof ( buf ), f );
-    fclose ( f );
-
-    int legal[100] = calloc ( 100, sizeof ( int ) );
-    int count = 0;
-
-    char *token = strtok ( buf, " " );
+    char *token = strtok ( st, " " );
     while ( token != NULL ) {
-        legal[count++] = atoi ( token );
+        nn[i++] = atof ( token );
         token = strtok ( NULL, " " );
     }
+    all_pointers[p++] = nn;
+    return nn;
+}
+int *get_legal_moves ( char stat[100], int *size )
+{
+    char *st;
+    char state[100];
+    strcpy ( state, stat );
+    int new_len = strlen ( state ) + 1;
+    for ( int i = strlen ( state ); i > 0; i-- ) {
+        state[i] = state[i-1];
+    }
+    state[new_len] = '\0';
+    state[0] = '1';
+    st = server_call ( state );
+    
+    int *legal = ( int * ) calloc ( 100, sizeof ( int ) );
+    int i = 0;
 
-    remove ( "response.txt" );
+    char *token = strtok ( st, " " );
+    while ( token != NULL ) {
+        legal[i++] = atoi ( token );
+        token = strtok ( NULL, " " );
+    }
     all_pointers[p++] = legal;
-
-    *size = count;
+    *size = i;
     return legal;
 }
-char *get_new_board ( char state[100], int move_index )
+char *get_new_board ( char stat[100], int move_index )
 {
-    FILE *f;
-
-    f = fopen ( "request.txt", "w" );
-    fprintf ( f, "%c", '2' );
-    for ( int i = 0; i < strlen ( state ); i++ ) {
-        fprintf ( f, "%c", state[i] );
+    char *st;
+    char state[100];
+    strcpy ( state, stat );
+    int new_len = strlen ( state );
+    for ( int i = strlen ( state ); i > 0; i-- ) {
+        state[i] = state[i-1];
     }
-    fprintf ( f, "%c", '$' );
-    fprintf ( f, "%d", move_index );
-    fclose ( f );
+    state[0] = '2';
+    state[new_len] = '$';
+    state[new_len + 1] = '\0';
+    sprintf ( state + strlen ( state ), "%d", move_index );
 
-    while ( access ( "response.txt", F_OK ) == -1 ) {
-        sleep ( 0.001 );
-    }
-
-    char buf[1024] = malloc ( 1024 * sizeof ( char ) );
-    f = fopen ( "response.txt", "r" );
-    fgets ( buf, sizeof ( buf ), f );
-    fclose ( f );
-
-    all_pointers[p++] = buf;
-    remove ( "response.txt" );
-    return buf;
+    return server_call ( state );
 }
-void set_zeros ( int *arr, int size )
+void set_zeros_double ( double *arr, int size )
 {
     for ( int i = 0; i < size; i++ ) {
         *(arr+i) = 0;
     }
 }
-
+void set_zeros_int ( int *arr, int size )
+{
+    for ( int i = 0; i < size; i++ ) {
+        *(arr+i) = 0;
+    }
+}
 struct Node *init_node ( char *board )
 {
     struct Node *node = malloc ( sizeof ( struct Node ) );
     int *legal_moves;
     int n_moves;
-    float *nn;
+    double *nn;
+
+    memcpy ( node->state, board, 100 * sizeof ( char ) );
     
     legal_moves = get_legal_moves ( board, &n_moves );
     memcpy ( node->a, legal_moves, n_moves * sizeof ( legal_moves[0] ) );
 
-    memcpy ( node->state, board, 8 * 8 * sizeof ( char ) );
     nn = neural_net ( board );
     node->node_val = nn[0];
     node->n_actions = n_moves;
     
-    set_zeros ( node->N, n_moves );
-    set_zeros ( node->W, n_moves );
-    memcpy ( node->P, nn + 1, n_moves * sizeof ( float ) );
+    set_zeros_int ( node->N, n_moves );
+    set_zeros_double ( node->W, n_moves );
+    memcpy ( node->P, nn + 1, n_moves * sizeof ( double ) );
 
     for ( int i = 0; i < CH_MAX; i++ ) {
         node->children[i] = NULL;
@@ -128,11 +170,12 @@ struct Node *init_node ( char *board )
     return node;
 }
 
-float *return_pi ( char given_board[100], int given_moves  )
+__declspec ( dllexport ) double *return_pi ( char given_board[100], int given_moves  )
 {
-    // Given moves : Moves played in the game till now
+    init_sever_conn();
     p = 0;
-    struct Node *root = init_node ( given_board );
+    struct Node *root = init_node ( given_board );  
+    printf ( "Started function\n" );
 
     for ( int i = 0; i < SIM_MAX; i++ ) {
         struct Node *cur_node = root;
@@ -142,7 +185,7 @@ float *return_pi ( char given_board[100], int given_moves  )
         while ( 1 ) {
             history_node[k] = cur_node;
             int a_star = 0;
-            float a_star_val = 0;
+            double a_star_val = 0;
 
             double sigma_b = 0;
             for ( int t = 0; t < cur_node->n_actions; t++ ) {
@@ -150,7 +193,7 @@ float *return_pi ( char given_board[100], int given_moves  )
             }
 
             for ( int j = 0; j < cur_node->n_actions; j++ ) {
-                float qsa = 0, usa = 0, total = 0;
+                double qsa = 0, usa = 0, total = 0;
                 if ( cur_node->N[j] != 0 ) {
                     qsa = cur_node->W[j] / cur_node->N[j];
                 }
@@ -177,14 +220,13 @@ float *return_pi ( char given_board[100], int given_moves  )
             history_action[k] = a_star;
             k += 1;
         }
-        float val = cur_node->node_val;
+        double val = cur_node->node_val;
         for ( int j = k - 1; j >= 0; j-- ) {
             history_node[j]->N[history_action[j]] += 1;
             history_node[j]->W[history_action[j]] += val;
         }
     }
-
-    float tau;
+    double tau;
     if ( given_moves < 10 ) {
         tau = 0.9;
     }
@@ -194,19 +236,21 @@ float *return_pi ( char given_board[100], int given_moves  )
     else {
         tau = 0.2;
     }
-    float sigma_b_tau = 0;
+    double sigma_b_tau = 0;
     for ( int j = 0; j < root->n_actions; j++ ) {
         sigma_b_tau += pow ( root->N[j], tau );
     }
-
-    float *pi = calloc ( root->n_actions, sizeof ( float ) );
+    
+    double *pi = calloc ( root->n_actions, sizeof ( double ) );
     for ( int j = 0; j < root->n_actions; j++ ) {
         pi[j] = pow ( root->N[j], tau ) / sigma_b_tau;
     }
-
-    for ( int i = 0; i < p; i++ ) {
-        free ( all_pointers[i] );
+    
+    
+    for ( int j = 0; j < root->n_actions; j++ ) {
+        printf ( "%lf ", pi[j] );
     }
 
+    close_server_conn();
     return pi;
 }
