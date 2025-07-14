@@ -18,7 +18,7 @@ moves = [ i + j for i in c for j in c ]
 # Handling promotions
 
 board = np.array ( c ).reshape ( 8, 8 ).T
-white_prom = [ i + j + k for j in board[0] for i in board[1] for k in prom ]
+white_prom = [ i + j + k for j in board[1] for i in board[0] for k in prom ]
 black_prom = [ i + j + k for j in board[6] for i in board[7] for k in prom ]
 
 # Total moves
