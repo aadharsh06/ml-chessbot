@@ -12,7 +12,6 @@ import threading
 
 HOST = '127.0.0.1'
 PORT = 65432
-close = 1
 
 model = nn.cnn()
 model.compile ( optimizer = 'adam',
@@ -40,7 +39,7 @@ def neural_net ( fen ):
     legal_moves = list ( map ( int, get_legal_moves ( fen ).split ( " " ) ) )
     x = nn.feature_planes ( fen )
     x = np.expand_dims ( x, axis = 0 )
-    policy, value = model.predict ( x )
+    policy, value = model.predict ( x, verbose = 0 )
 
     policy = np.array ( policy[0][legal_moves] )
     exp_policy = np.exp ( policy )
@@ -60,13 +59,8 @@ def client ( conn, addr ):
             
             function = req[0]
             data = req[1:]
-            
-            if ( function == '3' ):
-                global close
-                close = 0
-                res = "p"
-                return 
-            elif ( function == '2' ):
+
+            if ( function == '2' ):
                 res = get_new_board ( data )
             elif ( function == '1' ):
                 res = get_legal_moves ( data )
@@ -75,13 +69,13 @@ def client ( conn, addr ):
 
             conn.sendall ( res.encode() )
 
-def start_server():
-    print ( "Started" )
+def start_server ( stop ):
+    print ( "Server started\n" )
     with socket.socket ( socket.AF_INET, socket.SOCK_STREAM ) as s:
         s.bind ( ( HOST, PORT ) )
         s.listen()
 
-        while close:
+        while not stop.is_set():
             conn, addr = s.accept()
             threading.Thread ( target = client, args = ( conn, addr ) ).start()
         s.close()

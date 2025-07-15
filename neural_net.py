@@ -1,7 +1,6 @@
 
 import numpy as np
 import chess as ch
-import tensorflow as tf
 from tensorflow.keras import layers, Model, Input
 from re import split as re_split
 
@@ -51,7 +50,7 @@ def cnn():
     x = layers.BatchNormalization()( x )
     x = layers.ReLU()( x )
     
-    for _ in range ( 5 ):
+    for _ in range ( 3 ):
         x = residual_block ( x )
 
     p = layers.Conv2D ( 2, ( 1, 1 ), padding = 'same' )( x )
