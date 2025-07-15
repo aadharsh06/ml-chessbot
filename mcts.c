@@ -175,7 +175,6 @@ __declspec ( dllexport ) double *return_pi ( char given_board[100], int given_mo
     init_sever_conn();
     p = 0;
     struct Node *root = init_node ( given_board );  
-    printf ( "Started function\n" );
 
     for ( int i = 0; i < SIM_MAX; i++ ) {
         struct Node *cur_node = root;
@@ -244,11 +243,6 @@ __declspec ( dllexport ) double *return_pi ( char given_board[100], int given_mo
     double *pi = calloc ( root->n_actions, sizeof ( double ) );
     for ( int j = 0; j < root->n_actions; j++ ) {
         pi[j] = pow ( root->N[j], tau ) / sigma_b_tau;
-    }
-    
-    
-    for ( int j = 0; j < root->n_actions; j++ ) {
-        printf ( "%lf ", pi[j] );
     }
 
     close_server_conn();

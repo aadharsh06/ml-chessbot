@@ -6,14 +6,21 @@ import index_moves as im
 import threading
 import py_server
 from pickle import dump
+from time import time
 
 from ctypes import CDLL, POINTER, c_int, c_char_p, c_double
 
+start = time()
+
 engine = ce.SimpleEngine.popen_uci(r".\stockfish\stockfish-windows-x86-64-avx2.exe")
 
-def get_engine_policy ( board ):
+engine.configure ( {
+    "UCI_LimitStrength": True,
+    "UCI_Elo": 1800
+} )
 
-    anz = engine.analyse( board, ce.Limit ( time = 0.01 ), multipv = len ( [ str ( im.return_index ( move.uci() ) ) for move in board.legal_moves ] ) )
+def get_engine_policy ( board ):
+    anz = engine.analyse( board, ce.Limit ( time = 0.1 ), multipv = len ( [ str ( im.return_index ( move.uci() ) ) for move in board.legal_moves ] ) )
 
     moves = []
     scores = []
@@ -101,4 +108,6 @@ with open ( "./training_data/x.pkl", 'wb' ) as f:
 stop.set()
 engine.quit()
 
-print ( "\nProgram Complete" )
+end = time()
+
+print ( "\nProgram Complete: {} minutes".format ( (end - start)/60 ) )
