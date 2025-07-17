@@ -1,23 +1,23 @@
 
 import numpy as np
-import chess as ch
+import chess.pgn as cg
 import chess.engine as ce
 import index_moves as im
-import threading
-import py_server
 from pickle import dump
 from time import time
 import os
 
-from ctypes import CDLL, POINTER, c_int, c_char_p, c_double
+overall_start = time()
 
-start = time()
+pgn_pos = open ( r".\training_data\pos.txt", 'r' )
+cur_pos = int ( pgn_pos.read() )
+pgn_pos.close()
 
-games = 100
-times = [ 0.1, 0.5, 5, 7 ]
+all_games = open ( r".\training_data\lichess_db_standard_rated_2013-01.pgn", 'r' )
+all_games.seek ( cur_pos )
 
 def get_engine_policy ( board ):
-    anz = engine.analyse ( board, ce.Limit ( time = np.random.choice ( times ) ), multipv = len ( [ str ( im.return_index ( move.uci() ) ) for move in board.legal_moves ] ) )
+    anz = engine.analyse ( board, ce.Limit ( time = 1 ), multipv = min ( 10, len ( list ( board.legal_moves ) ) ) )
 
     moves = []
     scores = []
@@ -36,56 +36,40 @@ def get_engine_policy ( board ):
         policy = np.ones_like ( scores ) / len ( scores )
 
     return moves, policy
-
-HOST = "127.0.0.1"
-PORT = 65432
-
-stop = threading.Event()
-t = threading.Thread ( target = py_server.start_server, args = ( stop, ) )
-t.start()
-
 engine = ce.SimpleEngine.popen_uci ( ".\stockfish\stockfish-windows-x86-64-avx2.exe" )
 
-for g in range ( games ):
+total_games = 500
 
-    lib = CDLL ( "./mcts.dll" )
+b = 1
+while ( os.path.exists ( ".\training_data\b{}".format ( b ) ) ):
+    b += 1
+os.makedirs ("./training_data/b{}".format ( b ), exist_ok = True )
 
-    pi = lib.return_pi
-    pi.argtypes = [ c_char_p, c_int ]
-    pi.restype  = POINTER ( c_double )
+for g in range ( total_games ):
+    start = time()
 
-    board = ch.Board()
-    cur_fen = board.fen()
     moves = 0
-
     x = []
+    
+    game = cg.read_game ( all_games )
+    cur_pos = all_games.tell()
+    if game is None:
+        break
+    
+    board = game.board()
+    cur_fen = board.fen()
 
-    while ( not board.is_game_over() ):
-        # Engine plays frst
-        legal_moves, p_hat = get_engine_policy ( board )
-        legal_moves = [ im.return_index ( i ) for i in legal_moves ]
+    for move in game.mainline_moves():
+        considered_moves, p_hat = get_engine_policy ( board )
+        considered_moves = [ im.return_index ( i ) for i in considered_moves ]
         full_phat = im.empty_mv()
-        full_phat[legal_moves] = p_hat
+        full_phat[considered_moves] = p_hat
         x.append ( [ cur_fen, list ( full_phat ), 0 ] )
-        move = board.push_uci ( im.return_move ( int ( np.random.choice ( legal_moves, p = p_hat ) ) ) )
+        move = board.push ( move )
         moves += 1
         cur_fen = board.fen()
-        print ( "\nGame number: {}, Moves complete: {}\n".format ( g + 1, moves ), board, "\n", sep = "" )
+        #print ( "\nGame number: {}, Moves complete: {}\n".format ( g + 1, moves ), board, "\n", sep = "" )
         
-        if ( board.is_game_over() ):
-            break
-        
-        # Engine plays second
-        legal_moves, p_hat = get_engine_policy ( board )
-        legal_moves = [ im.return_index ( i ) for i in legal_moves ]
-        full_phat = im.empty_mv()
-        full_phat[legal_moves] = p_hat
-        x.append ( [ cur_fen, list ( full_phat ), 0 ] )
-        move = board.push_uci ( im.return_move ( int ( np.random.choice ( legal_moves, p = p_hat ) ) ) )
-        moves += 1
-        cur_fen = board.fen()
-        print ( "\nGame number: {}, Moves complete: {}\n".format ( g + 1, moves ), board, "\n", sep = "" )
-
     if board.result() == "1-0":
         white = 1
     elif board.result() == "0-1":
@@ -99,13 +83,16 @@ for g in range ( games ):
         else:
             x[i][2] = (-1) * white
 
-    with open ( "./training_data/x{}.pkl".format ( g ), 'wb' ) as f:
+    with open ( "./training_data/b{}/x{}.pkl".format ( b, g ), 'wb' ) as f:
         dump ( x, f )
 
     end = time()
 
-    print ( "\Game Complete: {} minutes".format ( (end - start)/60 ) )
+    print ( "\Game {} Complete: {} minutes".format ( g+1, (end - start)/60 ) )
 
-stop.set()
+    pgn_pos = open ( r".\training_data\pos.txt", 'w' )
+    pgn_pos.write ( str ( cur_pos ) )
+    pgn_pos.close()
+
 engine.quit()
-print ( "\nProgram Complete" )
+print ( "\nProgram Complete: Total time --> {} hours".format ( ( time() - overall_start ) / 3600 ) )
